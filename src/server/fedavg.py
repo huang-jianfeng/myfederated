@@ -66,7 +66,7 @@ def get_fedavg_argparser() -> ArgumentParser:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("-jr", "--join_ratio", type=float, default=0.1)
     parser.add_argument("-ge", "--global_epoch", type=int, default=100)
-    parser.add_argument("-le", "--local_epoch", type=int, default=5)
+    parser.add_argument("-le", "--local_epoch", type=int, default=1)
     parser.add_argument("-fe", "--finetune_epoch", type=int, default=0)
     parser.add_argument("-tg", "--test_gap", type=int, default=100)
     parser.add_argument("-ee", "--eval_test", type=int, default=1)
@@ -147,7 +147,7 @@ class FedAvgServer:
             )
             random.shuffle(self.clients_local_epoch)
 
-        # To make sure all algorithms run through the same client sampling stream.
+        # unique_modelTo make sure all algorithms run through the same client sampling stream.
         # Some algorithms' implicit operations at client side may disturb the stream if sampling happens at each FL round's beginning.
         self.client_sample_stream = [
             random.sample(
@@ -178,10 +178,10 @@ class FedAvgServer:
             )
         self.client_stats = {i: {} for i in self.train_clients}
         self.metrics = {
-            "train_before": [],
-            "train_after": [],
-            "test_before": [],
-            "test_after": [],
+            "train_correct_before": [],
+            "train_correct_after": [],
+            "test_correct_before": [],
+            "test_correct_after": [],
         }
         stdout = Console(log_path=False, log_time=False)
         self.logger = Logger(
@@ -189,7 +189,7 @@ class FedAvgServer:
             enable_log=self.args.save_log,
             logfile_path=OUT_DIR / self.algo / f"{self.args.dataset}_log.html",
         )
-        self.test_results: Dict[int, Dict[str, str]] = {}
+        self.test_results: Dict[int, Dict[str, str]] = {} 
         self.train_progress_bar = track(
             range(self.args.global_epoch), "[bold green]Training...", console=stdout
         )
@@ -213,15 +213,21 @@ class FedAvgServer:
             if (E + 1) % self.args.test_gap == 0:
                 self.test()
 
-            self.selected_clients = self.client_sample_stream[E]
+            self.selected_clients = self.client_sampling(E)
             self.train_one_round()
             self.log_info()
+            
+    def client_sampling(self,E:int)->List:
+        return self.client_sample_stream[E]
 
     def train_one_round(self):
         """The function of indicating specific things FL method need to do (at server side) in each communication round."""
         delta_cache = []
         weight_cache = []
+        self.logger.log(f"selected clients:{self.selected_clients}")
         for client_id in self.selected_clients:
+            # if client_id == 6:
+            #        self.logger.log("client_id = ",client_id)
             client_local_params = self.generate_client_params(client_id)
             (
                 delta,
@@ -254,6 +260,7 @@ class FedAvgServer:
             loss_before.append(stats["before"]["test_loss"])
             loss_after.append(stats["after"]["test_loss"])
             num_samples.append(stats["before"]["test_size"])
+    
 
         loss_before = torch.tensor(loss_before)
         loss_after = torch.tensor(loss_after)
@@ -401,6 +408,8 @@ class FedAvgServer:
                         for c in self.selected_clients
                     ]
                 )
+                
+         
 
                 acc_before = (
                     correct_before.sum(dim=-1, keepdim=True) / num_samples.sum() * 100.0
@@ -408,8 +417,8 @@ class FedAvgServer:
                 acc_after = (
                     correct_after.sum(dim=-1, keepdim=True) / num_samples.sum() * 100.0
                 ).item()
-                self.metrics[f"{label}_before"].append(acc_before)
-                self.metrics[f"{label}_after"].append(acc_after)
+                self.metrics[f"{label}_correct_before"].append(acc_before)
+                self.metrics[f"{label}_correct_after"].append(acc_after)
 
                 if self.args.visible:
                     self.viz.line(
@@ -462,10 +471,10 @@ class FedAvgServer:
 
             matplotlib.use("Agg")
             linestyle = {
-                "test_before": "solid",
-                "test_after": "solid",
-                "train_before": "dotted",
-                "train_after": "dotted",
+                "test_correct_before": "solid",
+                "test_correct_after": "solid",
+                "train_correct_before": "dotted",
+                "train_correct_after": "dotted",
             }
             for label, acc in self.metrics.items():
                 if len(acc) > 0:
@@ -488,7 +497,8 @@ class FedAvgServer:
                 if len(acc) > 0:
                     accuracies.append(np.array(acc).T)
                     labels.append(label)
-            pd.DataFrame(np.stack(accuracies, axis=1), columns=labels).to_csv(
+            if len(accuracies) > 0:
+                pd.DataFrame(np.stack(accuracies, axis=1), columns=labels).to_csv(
                 OUT_DIR / self.algo / f"{self.args.dataset}_acc_metrics.csv",
                 index=False,
             )
@@ -503,7 +513,11 @@ class FedAvgServer:
                 )
             else:
                 torch.save(self.model.state_dict(), OUT_DIR / self.algo / model_name)
-
+        
+        self.custom()
+    
+    def custom(self):
+        pass
 
 if __name__ == "__main__":
     server = FedAvgServer()

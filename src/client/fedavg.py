@@ -92,6 +92,9 @@ class FedAvgClient:
             self.testloader = DataLoader(self.global_testset, self.args.batch_size)
         else:
             self.testloader = DataLoader(self.testset, self.args.batch_size)
+    
+    def global_testset(self):
+        return self.global_testset
 
     def train_and_log(self, verbose=False) -> Dict[str, Dict[str, float]]:
         """This function includes the local training and logging process.
@@ -221,6 +224,7 @@ class FedAvgClient:
         The function for specifying operations in local training phase.
         If you wanna implement your method and your method has different local training operations to FedAvg, this method has to be overrided.
         """
+     
         self.model.train()
         for _ in range(self.local_epoch):
             for x, y in self.trainloader:

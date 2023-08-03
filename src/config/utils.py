@@ -1,3 +1,4 @@
+import inspect
 import os
 import random
 from copy import deepcopy
@@ -191,6 +192,7 @@ class Logger:
             )
 
     def log(self, *args, **kwargs):
+     
         self.stdout.log(*args, **kwargs)
         if self.enable_log:
             self.logger.log(*args, **kwargs)
