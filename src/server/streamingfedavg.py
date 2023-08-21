@@ -1,12 +1,15 @@
+from itertools import combinations
 from typing import Dict, List
 
-from argparse import Namespace
+from argparse import ArgumentParser, Namespace
 from copy import deepcopy
+import numpy as np
 from torch.utils.data import DataLoader, Subset
-
+from fedavg import get_fedavg_argparser
 import torch
 from fedavg import FedAvgServer
 from src.client.streamingfedavg import StreamingFedAvgClient
+import torch.nn.functional as F
 from src.config.utils import (
     OUT_DIR,
     evaluate,
@@ -15,9 +18,17 @@ from src.config.utils import (
     # trainable_params,
     # get_best_device,
 )
+
+def get_streaming_argparser() -> ArgumentParser:
+    parser = get_fedavg_argparser()
+    parser.add_argument("--counter_capacity", type=float, default=10)
+    return parser
+
 class StreamingFedAvgServer(FedAvgServer):
     
     def __init__(self, algo: str = "StreamingFedAvg", args: Namespace = None, unique_model=False, default_trainer=False):
+        if args is None:
+            args = get_streaming_argparser().parse_args()
         super().__init__(algo, args, unique_model, default_trainer)
         
         self.trainer = StreamingFedAvgClient(deepcopy(self.model),self.args, self.logger)
@@ -160,8 +171,26 @@ class StreamingFedAvgServer(FedAvgServer):
         train_df.to_csv(OUT_DIR/self.algo/f"{self.args.dataset}_train_loss_acc.csv")
         test_df.to_csv(OUT_DIR/self.algo/f"{self.args.dataset}_test_loss_acc.csv")
 
-    def client_sampling(self, E: int) -> List:
-        return super().client_sampling(E)
+ 
+    def client_sampling(self,E:int)->List:
+        sim_mat = np.zeros([self.client_num,self.client_num],dtype=np.float64)
+        for i in range(self.client_num):
+            for j in range(self.client_num):
+                if sim_mat[i][j] <= 0:
+                    sim_mat[i][j] = F.cosine_similarity(torch.Tensor(self.trainer.counters.get(i,self.trainer.init_counter)),
+                                                  torch.Tensor(self.trainer.counters.get(j,self.trainer.init_counter)),dim=0
+                                                  ).item()
+        sampled_clis = None
+        min_sim = float('inf')
+        for com in combinations(list(range(self.client_num)),int(self.client_num*self.args.join_ratio)):
+            tmp_sim = 0
+            for two in combinations(com,2):
+                tmp_sim += sim_mat[two[0]][two[1]]
+            if tmp_sim < min_sim:
+                sampled_clis = com
+                min_sim = tmp_sim
+            
+        return list(sampled_clis)
 if __name__ == "__main__":
     server = StreamingFedAvgServer()
     server.run()

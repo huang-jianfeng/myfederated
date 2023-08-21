@@ -16,7 +16,7 @@ set model="avgcnn"
 
 
 
-cd /d "D:\Users\test\pythoncode\FL-bench\src\server"
+cd /d ".\src\server"
 @REM set algorithm=fedavg
 @REM set local_lr=0.0002
 @REM call:start_experiment
@@ -44,8 +44,8 @@ python %algorithm%.py ^
 --batch_size %batch_size% ^
 --local_lr %local_lr%
 @echo off
-set srcpath="D:\Users\test\pythoncode\FL-bench\out\%algorithm%"
-set destpath="D:\Users\test\pythoncode\FL-bench\out\%algorithm%_%date:~0,4%_%date:~5,2%_%date:~8,2%_%time:~0,2%_%time:~3,2%_%time:~6,2%"
+set srcpath=".\out\%algorithm%"
+set destpath=".\out\%algorithm%_%date:~0,4%_%date:~5,2%_%date:~8,2%_%time:~0,2%_%time:~3,2%_%time:~6,2%"
 xcopy %srcpath% %destpath% /E /I /Y
 goto:eof
 

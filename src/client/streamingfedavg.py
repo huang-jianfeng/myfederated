@@ -1,4 +1,5 @@
 from argparse import Namespace
+from typing import Dict, List
 import numpy as np
 from copy import deepcopy
 from functools import cmp_to_key
@@ -10,8 +11,12 @@ class StreamingFedAvgClient(FedAvgClient):
     
     def __init__(self, model: DecoupledModel, args: Namespace, logger: Logger):
         super().__init__(model, args, logger)
+     
+        self.counters:Dict[int,List[int]] = {}
         
-        
+        self.init_counter:List[int] = [0]*args.counter_capacity
+        self.counter_capacity = args.counter_capacity
+
         total_class = len(self.dataset.classes)
         for i,index in enumerate(self.data_indices):
             
@@ -46,10 +51,16 @@ class StreamingFedAvgClient(FedAvgClient):
         new_num = min(int(total_num*add_fraction+cur_num),total_num)
         
         cache_indices = []
+        if self.client_id not in self.counters.keys():
+            self.counters[self.client_id] = deepcopy(self.init_counter)
+        counter = self.counters[self.client_id]
         for indice in self.total_data_indices[self.client_id]['train'][cur_num:new_num]:
             # if indice ==6223:
             #     print(type(indice))
             cache_indices.append(indice)
+            _,y = self.dataset[indice]
+            counter[y%self.counter_capacity] += 1
+        
         
         cache_indices = np.array(cache_indices,dtype=int)
         self.data_indices[self.client_id]['train'] = np.append(self.data_indices[self.client_id]['train'],cache_indices)
